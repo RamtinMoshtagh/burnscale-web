@@ -1,20 +1,24 @@
+// src/app/layout.tsx
+
 import './globals.css';
 import { ReactNode } from 'react';
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
+import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
+import type { Session } from '@supabase/auth-helpers-nextjs';
+import type { Metadata } from 'next';
+import type { Database } from '@/app/types/supabase';
+
 import SupabaseProvider from '@/app/components/SessionContextProvider';
 import ClientLayoutShell from '@/app/components/ClientLayoutShell';
-import { Session } from '@supabase/auth-helpers-nextjs';
-import { Database } from '@/app/types/supabase';
+import Navbar from '@/app/components/Navbar';
 
-
-export const metadata = {
+export const metadata: Metadata = {
   title: 'BurnScale AI',
   description: 'Track your burnout and recovery patterns with AI insight.',
 };
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
-  const cookieStore = await cookies(); // ✅ now properly awaited
+  const cookieStore = cookies();
 
   const supabase = createServerComponentClient<Database>({
     cookies: () => cookieStore,
@@ -26,12 +30,13 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
 
   return (
     <html lang="en">
-      <body>
+      <head />
+      <body className="bg-gray-50 text-gray-900">
         <SupabaseProvider initialSession={session as Session}>
+          <Navbar />
           <ClientLayoutShell>{children}</ClientLayoutShell>
         </SupabaseProvider>
       </body>
     </html>
   );
 }
-

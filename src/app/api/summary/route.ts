@@ -5,16 +5,28 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+interface CheckInEntry {
+  mood: string;
+  energy_level: number;
+  meaningfulness: number;
+  notes?: string | null;
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const checkins = body.checkins;
+    const checkins: CheckInEntry[] = body.checkins;
 
-    const formatted = checkins.map((entry: any) => {
-      return `Mood: ${entry.mood}, Energy: ${entry.energy_level}, Meaning: ${entry.meaningfulness}, Notes: ${
-        entry.notes || 'none'
-      }`;
-    });
+    if (!Array.isArray(checkins) || checkins.length === 0) {
+      return NextResponse.json(
+        { error: 'Invalid or empty check-in data.' },
+        { status: 400 }
+      );
+    }
+
+    const formatted = checkins.map((entry) =>
+      `Mood: ${entry.mood}, Energy: ${entry.energy_level}, Meaning: ${entry.meaningfulness}, Notes: ${entry.notes || 'none'}`
+    );
 
     const prompt = `
 You are a helpful wellness assistant.
@@ -34,9 +46,12 @@ ${formatted.join('\n')}
       messages: [{ role: 'user', content: prompt }],
     });
 
-    const response = chat.choices[0].message.content || '';
-    const summary = response.match(/Summary:\s*(.+)/i)?.[1] || '';
-    const imagePrompt = response.match(/Image Prompt:\s*(.+)/i)?.[1] || '';
+    const content = chat.choices?.[0]?.message?.content || '';
+    const summaryMatch = content.match(/Summary:\s*(.+)/i);
+    const promptMatch = content.match(/Image Prompt:\s*(.+)/i);
+
+    const summary = summaryMatch?.[1]?.trim() || '';
+    const imagePrompt = promptMatch?.[1]?.trim() || '';
 
     const image = await openai.images.generate({
       model: 'dall-e-3',
@@ -47,14 +62,16 @@ ${formatted.join('\n')}
     });
 
     const imageUrl =
-  Array.isArray(image.data) && image.data.length > 0 && image.data[0].url
-    ? image.data[0].url
-    : '';
-
+      Array.isArray(image.data) && image.data[0]?.url
+        ? image.data[0].url
+        : '';
 
     return NextResponse.json({ summary, imagePrompt, imageUrl });
-  } catch (err: any) {
-    console.error('AI MoodBoard Error:', err.message);
-    return NextResponse.json({ error: 'Server error' }, { status: 500 });
+  } catch (err: unknown) {
+    console.error('AI MoodBoard Error:', (err as Error).message);
+    return NextResponse.json(
+      { error: 'Internal server error. Please try again later.' },
+      { status: 500 }
+    );
   }
 }

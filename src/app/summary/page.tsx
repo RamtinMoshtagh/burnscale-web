@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 
 interface CheckIn {
@@ -19,50 +19,72 @@ export default function SummaryPage() {
   const [aiSummary, setAiSummary] = useState('');
   const [imagePrompt, setImagePrompt] = useState('');
   const [imageUrl, setImageUrl] = useState('');
-  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     const fetchData = async () => {
-      const { data, error } = await supabase
-        .from('checkins')
-        .select('*')
-        .order('created_at', { ascending: true })
-        .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString());
+      try {
+        const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
-      if (!error && data.length > 0) {
-        setCheckins(data);
+        const { data: checkinData, error: checkinError } = await supabase
+          .from('checkins')
+          .select('*')
+          .order('created_at', { ascending: true })
+          .gte('created_at', oneWeekAgo);
 
-        const res = await fetch('/api/summary', {
+        if (checkinError) throw checkinError;
+        if (!checkinData || checkinData.length === 0) {
+          setCheckins([]);
+          setLoading(false);
+          return;
+        }
+
+        setCheckins(checkinData);
+
+        const response = await fetch('/api/openai-proxy', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ checkins: data }),
+          body: JSON.stringify({ checkins: checkinData }),
         });
 
-        const result = await res.json();
+        const result = await response.json();
+
+        if (!result.summary || !result.imagePrompt) {
+          throw new Error('AI failed to generate summary or prompt');
+        }
+
         setAiSummary(result.summary);
         setImagePrompt(result.imagePrompt);
-        setImageUrl(result.imageUrl);
+        setImageUrl(result.imageUrl || '');
 
-        // Save the generated moodboard to Supabase
-        const { error: saveError } = await supabase.from('moodboards').insert([
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        if (userError || !user) throw userError;
+
+        const { error: insertError } = await supabase.from('moodboards').insert([
           {
+            user_id: user.id,
             summary: result.summary,
-            image_prompt: result.imagePrompt,
+            prompt: result.imagePrompt,
             image_url: result.imageUrl,
           },
         ]);
 
-        if (!saveError) setSaved(true);
-      }
+        if (insertError) throw insertError;
 
-      setLoading(false);
+        setSaved(true);
+      } catch (err) {
+        console.error('Summary error:', err);
+        setError('Something went wrong while generating your moodboard.');
+      } finally {
+        setLoading(false);
+      }
     };
 
     fetchData();
   }, []);
 
-  const handleDownload = () => {
+  const handleDownload = useCallback(() => {
     if (!imageUrl) return;
     const link = document.createElement('a');
     link.href = imageUrl;
@@ -70,45 +92,62 @@ export default function SummaryPage() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-  };
+  }, [imageUrl]);
 
   return (
-    <main className="min-h-screen bg-gray-50 px-6 py-10 text-gray-800">
-      <div className="max-w-2xl mx-auto">
-        <h1 className="text-3xl font-bold mb-6">🎨 MoodBoard AI</h1>
+    <main className="min-h-screen bg-gray-50 px-4 py-10 text-gray-800">
+      <div className="max-w-2xl mx-auto space-y-8">
+        <h1 className="text-3xl font-bold text-center">🎨 MoodBoard AI</h1>
 
         {loading ? (
-          <p>Loading...</p>
+          <div className="text-center py-12">
+            <p className="text-gray-500 text-sm animate-pulse">Generating your insights...</p>
+          </div>
         ) : checkins.length === 0 ? (
-          <p>No check-ins to summarize.</p>
+          <div className="text-center py-12">
+            <p className="text-gray-500">No check-ins to summarize yet.</p>
+          </div>
+        ) : error ? (
+          <div className="text-center py-12">
+            <p className="text-red-500 font-medium">{error}</p>
+          </div>
         ) : (
           <>
-            <div className="bg-white shadow-md rounded-xl p-6 mb-6">
-              <h2 className="text-lg font-semibold mb-2">🧠 AI Summary of Your Week</h2>
-              <p className="text-gray-700 whitespace-pre-line">{aiSummary}</p>
-            </div>
+            {/* AI Summary Section */}
+            <section className="bg-white rounded-xl shadow-sm p-6 space-y-3">
+              <h2 className="text-xl font-semibold">🧠 AI Summary of Your Week</h2>
+              <p className="text-gray-700 whitespace-pre-line leading-relaxed">
+                {aiSummary}
+              </p>
+            </section>
 
-            <div className="bg-white shadow-md rounded-xl p-6 mb-6">
-              <h2 className="text-lg font-semibold mb-2">🖼️ Mood Visual</h2>
-              <p className="text-sm text-gray-500 mb-3">Prompt: {imagePrompt}</p>
-              {imageUrl && (
+            {/* Moodboard Visual */}
+            <section className="bg-white rounded-xl shadow-sm p-6 space-y-3">
+              <h2 className="text-xl font-semibold">🖼️ Visual Mood Snapshot</h2>
+              <p className="text-sm text-gray-500">Prompt used: <span className="italic">{imagePrompt}</span></p>
+              {imageUrl ? (
                 <img
                   src={imageUrl}
-                  alt="Moodboard"
+                  alt="Moodboard generated by AI"
                   className="w-full h-64 object-cover rounded-lg shadow"
                 />
+              ) : (
+                <p className="text-gray-400 italic">No image generated</p>
               )}
-            </div>
+            </section>
 
-            <div className="text-center mt-8 space-y-2">
+            {/* Actions */}
+            <div className="text-center mt-6 space-y-3">
               <button
                 onClick={handleDownload}
-                className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition"
+                className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-3 rounded-lg transition focus:outline-none focus:ring-2 focus:ring-blue-400"
               >
                 📤 Download MoodBoard
               </button>
               {saved && (
-                <p className="text-sm text-green-600">Moodboard saved to your journal ✅</p>
+                <p className="text-sm text-green-600 font-medium">
+                  ✅ Moodboard saved to your journal
+                </p>
               )}
             </div>
           </>
