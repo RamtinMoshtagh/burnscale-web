@@ -24,10 +24,12 @@ export async function POST(req: Request) {
 You are a helpful wellness assistant.
 Given the following logs, summarize the user's week in 2–3 sentences.
 Then suggest a visual image prompt for AI art based on their emotional state.
+Finally, reflect on the user's wellbeing this week in a personalized tone with practical advice.
 
 Return in this format:
 Summary: ...
 Image Prompt: ...
+Personal Reflection: ...
 
 Logs:
 ${formatted.join('\n')}
@@ -46,12 +48,14 @@ ${formatted.join('\n')}
 
     const summaryMatch = content.match(/Summary:\s*(.+)/i);
     const promptMatch = content.match(/Image Prompt:\s*(.+)/i);
+    const reflectionMatch = content.match(/Personal Reflection:\s*(.+)/i);
 
     const summary = summaryMatch?.[1]?.trim() || '';
     const imagePrompt = promptMatch?.[1]?.trim() || '';
+    const personalReflection = reflectionMatch?.[1]?.trim() || '';
 
-    if (!summary || !imagePrompt) {
-      return NextResponse.json({ error: 'AI failed to generate summary or prompt.' }, { status: 500 });
+    if (!summary || !imagePrompt || !personalReflection) {
+      return NextResponse.json({ error: 'AI failed to generate complete response.' }, { status: 500 });
     }
 
     let imageUrl = '';
@@ -70,14 +74,13 @@ ${formatted.join('\n')}
       console.error('Image generation failed:', imageError);
     }
 
-    return NextResponse.json({ summary, imagePrompt, imageUrl });
+    return NextResponse.json({ summary, imagePrompt, imageUrl, personalReflection });
   } catch (err: any) {
-  console.error('Proxy error:', err?.message || err);
+    console.error('Proxy error:', err?.message || err);
 
-  return NextResponse.json(
-    { error: err?.message || 'Internal server error', details: err },
-    { status: 500 }
-  );
-}
-
+    return NextResponse.json(
+      { error: err?.message || 'Internal server error', details: err },
+      { status: 500 }
+    );
+  }
 }

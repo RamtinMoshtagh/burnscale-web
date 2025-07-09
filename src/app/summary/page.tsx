@@ -19,6 +19,11 @@ export default function SummaryPage() {
   const [aiSummary, setAiSummary] = useState('');
   const [imagePrompt, setImagePrompt] = useState('');
   const [imageUrl, setImageUrl] = useState('');
+  const [personalReflection, setPersonalReflection] = useState('');
+  const [frequentTriggers, setFrequentTriggers] = useState<string[]>([]);
+  const [tips, setTips] = useState<string[]>([]);
+  const [tipsLoading, setTipsLoading] = useState(false);
+  const [tipsError, setTipsError] = useState('');
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
 
@@ -42,6 +47,19 @@ export default function SummaryPage() {
 
         setCheckins(checkinData);
 
+        // Detect frequently repeated stress triggers
+        const triggerMap: Record<string, number> = {};
+        checkinData.forEach((entry) => {
+entry.stress_triggers?.forEach((trigger: string) => {
+            triggerMap[trigger] = (triggerMap[trigger] || 0) + 1;
+          });
+        });
+        const frequent = Object.entries(triggerMap)
+          .filter(([, count]) => count >= 3)
+          .map(([trigger]) => trigger);
+        setFrequentTriggers(frequent);
+
+        // Generate AI summary
         const response = await fetch('/api/openai-proxy', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -49,14 +67,14 @@ export default function SummaryPage() {
         });
 
         const result = await response.json();
-
-        if (!result.summary || !result.imagePrompt) {
-          throw new Error('AI failed to generate summary or prompt');
+        if (!result.summary || !result.imagePrompt || !result.personalReflection) {
+          throw new Error('AI failed to generate a complete summary');
         }
 
         setAiSummary(result.summary);
         setImagePrompt(result.imagePrompt);
         setImageUrl(result.imageUrl || '');
+        setPersonalReflection(result.personalReflection);
 
         const { data: { user }, error: userError } = await supabase.auth.getUser();
         if (userError || !user) throw userError;
@@ -71,7 +89,6 @@ export default function SummaryPage() {
         ]);
 
         if (insertError) throw insertError;
-
         setSaved(true);
       } catch (err) {
         console.error('Summary error:', err);
@@ -94,6 +111,32 @@ export default function SummaryPage() {
     document.body.removeChild(link);
   }, [imageUrl]);
 
+  const handleGetTips = async () => {
+    setTips([]);
+    setTipsError('');
+    setTipsLoading(true);
+
+    try {
+      const res = await fetch('/api/tips-agent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ triggers: frequentTriggers }),
+      });
+
+      const data = await res.json();
+      if (!data.tips || !Array.isArray(data.tips)) {
+        throw new Error(data.error || 'No tips returned');
+      }
+
+      setTips(data.tips);
+    } catch (err) {
+      console.error('Tips error:', err);
+      setTipsError('Failed to load tips.');
+    } finally {
+      setTipsLoading(false);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-gray-50 px-4 py-10 text-gray-800">
       <div className="max-w-2xl mx-auto space-y-8">
@@ -113,18 +156,43 @@ export default function SummaryPage() {
           </div>
         ) : (
           <>
-            {/* AI Summary Section */}
+            {/* Reflection */}
             <section className="bg-white rounded-xl shadow-sm p-6 space-y-3">
-              <h2 className="text-xl font-semibold">🧠 AI Summary of Your Week</h2>
-              <p className="text-gray-700 whitespace-pre-line leading-relaxed">
-                {aiSummary}
-              </p>
+              <h2 className="text-xl font-semibold">💬 Personalized Reflection</h2>
+              <p className="text-gray-700 whitespace-pre-line leading-relaxed">{personalReflection}</p>
             </section>
 
-            {/* Moodboard Visual */}
+            {/* Pattern Detection + CTA */}
+            {frequentTriggers.length > 0 && (
+              <section className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-md space-y-2">
+                <h3 className="font-semibold text-yellow-800">🧠 Trigger Pattern Detected</h3>
+                <p className="text-sm text-yellow-700">
+                  I’ve noticed that <strong>{frequentTriggers.join(', ')}</strong> keep showing up as
+                  stress triggers. Would you like some tips or techniques that might help?
+                </p>
+                <button
+                  onClick={handleGetTips}
+                  className="bg-yellow-500 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-yellow-600 transition"
+                >
+                  {tipsLoading ? 'Loading...' : '💡 Show Me Tips'}
+                </button>
+                {tipsError && <p className="text-red-500 text-sm mt-1">{tipsError}</p>}
+                {tips.length > 0 && (
+                  <ul className="mt-3 list-disc list-inside text-sm text-gray-800 space-y-1">
+                    {tips.map((tip, idx) => (
+                      <li key={idx}>💡 {tip}</li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+            )}
+
+            {/* Visual Moodboard */}
             <section className="bg-white rounded-xl shadow-sm p-6 space-y-3">
               <h2 className="text-xl font-semibold">🖼️ Visual Mood Snapshot</h2>
-              <p className="text-sm text-gray-500">Prompt used: <span className="italic">{imagePrompt}</span></p>
+              <p className="text-sm text-gray-500">
+                Prompt used: <span className="italic">{imagePrompt}</span>
+              </p>
               {imageUrl ? (
                 <img
                   src={imageUrl}
@@ -136,7 +204,7 @@ export default function SummaryPage() {
               )}
             </section>
 
-            {/* Actions */}
+            {/* Download Button */}
             <div className="text-center mt-6 space-y-3">
               <button
                 onClick={handleDownload}
