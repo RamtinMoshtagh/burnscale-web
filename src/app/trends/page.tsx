@@ -1,20 +1,38 @@
-// app/trends/page.tsx
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
 import { useSupabaseClient } from '@supabase/auth-helpers-react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import type { ChartData } from 'chart.js';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  type ChartData,
+} from 'chart.js';
 
-/* Lazily import only the <Line /> component */
-const Line = dynamic(() =>
-  import('react-chartjs-2').then((m) => m.Line), { ssr: false }
+// Register necessary Chart.js components, including the Category scale for the x-axis
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend
 );
 
-/* ------------------------------------------------------------------ */
-/*  Types                                                              */
-/* ------------------------------------------------------------------ */
+// Lazily import only the <Line /> component from react-chartjs-2
+const Line = dynamic(
+  () => import('react-chartjs-2').then((mod) => mod.Line),
+  { ssr: false }
+);
+
 interface CheckIn {
   created_at: string;
   mood: string;
@@ -22,19 +40,16 @@ interface CheckIn {
   meaningfulness: number;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Component                                                          */
-/* ------------------------------------------------------------------ */
 export default function TrendsPage() {
-  const supabase = useSupabaseClient();      // <-- typed client
+  const supabase = useSupabaseClient();
   const [rows, setRows] = useState<CheckIn[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState('');
+  const [error, setError] = useState('');
 
-  /* fetch once on mount */
+  // Fetch the last 7 days of check-ins
   useEffect(() => {
     const fetchWeek = async () => {
-      const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1_000).toISOString();
+      const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
       const { data, error } = await supabase
         .from('checkins')
         .select('created_at,mood,energy_level,meaningfulness')
@@ -48,12 +63,10 @@ export default function TrendsPage() {
     fetchWeek();
   }, [supabase]);
 
-  /* -------------------------------------------------------------- */
-  /*  Derived values (memoised)                                     */
-  /* -------------------------------------------------------------- */
+  // Compute labels, chartData and stats only when rows change
   const stats = useMemo(() => {
     if (!rows.length) {
-      const empty = {
+      return {
         labels: [] as string[],
         chartData: {} as ChartData<'line'>,
         total: 0,
@@ -61,7 +74,6 @@ export default function TrendsPage() {
         highestMeaning: { day: '', value: 0 },
         lowestEnergy: { day: '', value: 0 },
       };
-      return empty;
     }
 
     const labels = rows.map((r) =>
@@ -88,29 +100,24 @@ export default function TrendsPage() {
       ],
     };
 
-    /* quick stats */
     const moodCount: Record<string, number> = {};
-    let highestMeaning = { value: 0, day: '' };
-    let lowestEnergy   = { value: 10, day: '' };
+    let highestMeaning = { day: '', value: 0 };
+    let lowestEnergy = { day: '', value: 10 };
 
     rows.forEach((r) => {
       moodCount[r.mood] = (moodCount[r.mood] ?? 0) + 1;
+      const dayLabel = new Date(r.created_at).toLocaleDateString(undefined, { weekday: 'short' });
 
-      if (r.meaningfulness > highestMeaning.value)
-        highestMeaning = {
-          value: r.meaningfulness,
-          day: new Date(r.created_at).toLocaleDateString(undefined, { weekday: 'short' }),
-        };
-
-      if (r.energy_level < lowestEnergy.value)
-        lowestEnergy = {
-          value: r.energy_level,
-          day: new Date(r.created_at).toLocaleDateString(undefined, { weekday: 'short' }),
-        };
+      if (r.meaningfulness > highestMeaning.value) {
+        highestMeaning = { value: r.meaningfulness, day: dayLabel };
+      }
+      if (r.energy_level < lowestEnergy.value) {
+        lowestEnergy = { value: r.energy_level, day: dayLabel };
+      }
     });
 
     const mostMood = Object.entries(moodCount).reduce(
-      (acc, [mood, count]) => (count > acc.count ? { mood, count } : acc),
+      (acc, [m, count]) => (count > acc.count ? { mood: m, count } : acc),
       { mood: '', count: 0 }
     );
 
@@ -124,9 +131,6 @@ export default function TrendsPage() {
     };
   }, [rows]);
 
-  /* -------------------------------------------------------------- */
-  /*  UI                                                             */
-  /* -------------------------------------------------------------- */
   return (
     <main className="min-h-screen bg-gray-50 px-4 py-10 text-gray-800">
       <div className="mx-auto max-w-4xl">
@@ -135,25 +139,29 @@ export default function TrendsPage() {
         </h1>
 
         {loading && (
-          <p className="animate-pulse text-center text-gray-500">Loading trend data…</p>
+          <p className="animate-pulse text-center text-gray-500">
+            Loading trend data…
+          </p>
         )}
 
         {error && (
-          <p className="text-center text-red-600">Unable to load data: {error}</p>
+          <p className="text-center text-red-600">
+            Unable to load data: {error}
+          </p>
         )}
 
         {!loading && !error && stats.total === 0 && (
-          <p className="text-center text-gray-500">No check-ins for the past 7 days.</p>
+          <p className="text-center text-gray-500">
+            No check-ins for the past 7 days.
+          </p>
         )}
 
         {!loading && !error && stats.total > 0 && (
           <>
-            {/* Chart */}
             <section className="mb-6 rounded-xl bg-white p-4 shadow">
               <Line data={stats.chartData} />
             </section>
 
-            {/* Stats grid */}
             <section className="mb-10 grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Stat label="Total check-ins" value={stats.total} />
               <Stat
@@ -173,7 +181,6 @@ export default function TrendsPage() {
               />
             </section>
 
-            {/* CTA */}
             <div className="text-center">
               <Link
                 href="/summary"
@@ -189,8 +196,15 @@ export default function TrendsPage() {
   );
 }
 
-/* Reusable stat card */
-function Stat({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
+function Stat({
+  label,
+  value,
+  sub,
+}: {
+  label: string;
+  value: string | number;
+  sub?: string;
+}) {
   return (
     <div className="rounded-xl bg-white p-4 text-center shadow">
       <p className="mb-1 text-sm text-gray-500">{label}</p>
