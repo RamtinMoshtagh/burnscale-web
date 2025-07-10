@@ -10,7 +10,6 @@ import type { Database } from '@/app/types/supabase';
 
 import SupabaseProvider from '@/app/components/SessionContextProvider';
 import ClientLayoutShell from '@/app/components/ClientLayoutShell';
-import Navbar from '@/app/components/Navbar';
 
 export const metadata: Metadata = {
   title: 'BurnScale AI',
@@ -33,7 +32,6 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
       <head />
       <body className="bg-gray-50 text-gray-900">
         <SupabaseProvider initialSession={session as Session}>
-          <Navbar />
           <ClientLayoutShell>{children}</ClientLayoutShell>
         </SupabaseProvider>
       </body>

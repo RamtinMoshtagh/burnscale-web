@@ -1,64 +1,104 @@
 // src/app/dashboard/page.tsx
+import { Suspense } from 'react';
 import { supabaseServer } from '@/lib/supabaseServer';
-import TrendsCard from '../components/TrendsCard';
-import TriggerDonutCard from '../components/TriggerDonutCard';
 import ZoneSummaryBar from '../components/ZoneSummaryBar';
+import TriggerDonutCard from '../components/TriggerDonutCard';
 
-export default async function DashboardPage() {
+/* ------------------------------------------------------------------ */
+/*  Shared zone thresholds – keep UI & calcs in sync                   */
+/* ------------------------------------------------------------------ */
+export const ZONE_THRESHOLDS = [
+  { max: 20, label: 'Energized' },
+  { max: 40, label: 'Mild Stress' },
+  { max: 60, label: 'Warning Zone' },
+  { max: 80, label: 'Burnout Zone' },
+  { max: Number.POSITIVE_INFINITY, label: 'Critical' },
+] as const;
+
+function zoneLabel(score: number) {
+  return ZONE_THRESHOLDS.find((z) => score <= z.max)!.label;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Row type coming back from SQL                                     */
+/* ------------------------------------------------------------------ */
+interface Row {
+  day: string;                     // YYYY-MM-DD (DATE)
+  avg_score: number;
+  avg_energy: number;
+  avg_meaning: number;
+  trigger_counts: Record<string, number>;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Data loader (single RPC)                                          */
+/* ------------------------------------------------------------------ */
+async function getWeeklyDashboard(): Promise<Row[]> {
   const supabase = supabaseServer();
-  const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase.rpc('dashboard_weekly');
 
-  const { data, error } = await supabase
-    .from('checkins')
-    .select('created_at, burnout_score, energy_level, meaningfulness, stress_triggers')
-    .gte('created_at', oneWeekAgo)
-    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
 
-  if (error) {
-    console.error('Error fetching check-ins:', error);
-    return <div className="text-red-500 text-center mt-10">⚠️ Failed to load dashboard data.</div>;
+/* ------------------------------------------------------------------ */
+/*  Server component                                                  */
+/* ------------------------------------------------------------------ */
+export default async function DashboardPage() {
+  let rows: Row[];
+  try {
+    rows = await getWeeklyDashboard();
+  } catch (err) {
+    console.error(err);
+    return (
+      <div className="mt-10 text-center text-red-500" role="alert">
+        ⚠️ Failed to load dashboard data.
+      </div>
+    );
   }
 
-  const burnoutData = [];
-  const trendData = [];
-  const triggerCounts: Record<string, number> = {};
-  const zoneCounts = {
-    Energized: 0,
-    'Mild Stress': 0,
-    'Warning Zone': 0,
-    'Burnout Zone': 0,
-    Critical: 0,
-  };
+  /* -------- transform once for child cards -------- */
+  const burnoutData = rows.map((r) => ({
+    date: new Date(r.day).toLocaleDateString(),
+    score: r.avg_score,
+  }));
 
-  const getZoneLabel = (score: number): keyof typeof zoneCounts => {
-    if (score <= 20) return 'Energized';
-    if (score <= 40) return 'Mild Stress';
-    if (score <= 60) return 'Warning Zone';
-    if (score <= 80) return 'Burnout Zone';
-    return 'Critical';
-  };
+  const trendData = rows.map((r) => ({
+    date: new Date(r.day).toLocaleDateString(),
+    energy: r.avg_energy,
+    meaning: r.avg_meaning,
+  }));
 
-  for (const entry of data || []) {
-    const date = new Date(entry.created_at).toLocaleDateString();
-    const score = entry.burnout_score ?? 0;
-
-    burnoutData.push({ date, score });
-    trendData.push({ date, energy: entry.energy_level ?? 0, meaning: entry.meaningfulness ?? 0 });
-
-    zoneCounts[getZoneLabel(score)]++;
-
-    for (const trigger of entry.stress_triggers || []) {
-      triggerCounts[trigger] = (triggerCounts[trigger] || 0) + 1;
+  const triggerCounts = rows.reduce<Record<string, number>>((acc, r) => {
+    for (const [t, n] of Object.entries(r.trigger_counts) as [string, number][]) {
+      acc[t] = (acc[t] ?? 0) + n;
     }
-  }
+    return acc;
+  }, {});
 
+  /*  Optional: zone counts for a future card
+  const zoneCounts = rows.reduce<Record<string, number>>((acc, r) => {
+    const label = zoneLabel(r.avg_score);
+    acc[label] = (acc[label] ?? 0) + 1;
+    return acc;
+  }, {});
+  */
+
+  /* ---------------- UI ---------------- */
   return (
-    <div className="max-w-3xl mx-auto px-4 py-10 space-y-8">
-      <h1 className="text-4xl font-bold text-center text-black">Your Weekly Wellness Overview</h1>
+    <div className="mx-auto max-w-3xl space-y-8 px-4 py-10">
+      <h1 className="text-center text-4xl font-bold text-black">
+        Your Weekly Wellness Overview
+      </h1>
 
-      <ZoneSummaryBar burnoutScores={burnoutData.map((d) => d.score)} />
-      <TriggerDonutCard triggerCounts={triggerCounts} />
-      <TrendsCard data={trendData} />
+      {/* These <Suspense> wrappers let HTML paint instantly */}
+      <Suspense fallback={<div className="h-40 animate-pulse rounded-lg bg-gray-100" />}>
+        <ZoneSummaryBar burnoutScores={burnoutData.map((d) => d.score)} />
+      </Suspense>
+
+      <Suspense fallback={<div className="h-60 animate-pulse rounded-lg bg-gray-100" />}>
+        <TriggerDonutCard triggerCounts={triggerCounts} />
+      </Suspense>
     </div>
   );
 }

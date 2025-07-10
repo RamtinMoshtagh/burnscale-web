@@ -1,139 +1,141 @@
+// app/(auth)/AuthPage.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabaseClient';
+import { useSupabaseClient, useSessionContext } from '@supabase/auth-helpers-react';
 import Image from 'next/image';
 
+/* ---------------------------------------------------- */
+/*  Basic helpers                                       */
+/* ---------------------------------------------------- */
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/* ---------------------------------------------------- */
+/*  Component                                           */
+/* ---------------------------------------------------- */
 export default function AuthPage() {
   const router = useRouter();
+  const supabase = useSupabaseClient();
+  const { session, isLoading: sessionLoading } = useSessionContext();
 
+  /* redirect when already logged-in */
+  useEffect(() => {
+    if (session) router.replace('/check-in');
+  }, [session, router]);
+
+  /* local state */
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        router.replace('/check-in');
-      }
-    });
-    return () => subscription.unsubscribe();
-  }, [router]);
+  /* handle submit */
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setErrorMsg('');
 
-  const handleSubmit = async () => {
-    setLoading(true);
-    setError('');
-
-    try {
-      const { error } = isSignUp
-        ? await supabase.auth.signUp({ email, password })
-        : await supabase.auth.signInWithPassword({ email, password });
-
-      if (error) {
-        setError(error.message);
-      }
-    } catch (err) {
-      console.error(err);
-      setError('Unexpected error. Please try again.');
-    } finally {
-      setLoading(false);
+    if (!emailPattern.test(email)) {
+      setErrorMsg('Enter a valid e-mail address.');
+      return;
     }
-  };
+    if (password.length < 6) {
+      setErrorMsg('Password must be at least 6 characters.');
+      return;
+    }
 
+    setSubmitting(true);
+
+    const { error } = isSignUp
+      ? await supabase.auth.signUp({ email, password })
+      : await supabase.auth.signInWithPassword({ email, password });
+
+    if (error) setErrorMsg(error.message);
+    setSubmitting(false);
+  }
+
+  /* wait for initial session check */
+  if (sessionLoading) return null;
+
+  /* -------------------------------------------------- */
+  /*  UI                                                */
+  /* -------------------------------------------------- */
   return (
-    <main className="min-h-screen flex flex-col md:flex-row bg-white">
-      {/* Left: Branding */}
-      <div className="hidden md:flex flex-col justify-center items-center bg-blue-600 text-white w-full md:w-1/2 p-12">
-        <h2 className="text-4xl font-extrabold mb-4">Welcome to BurnScale.AI</h2>
-        <p className="text-lg text-blue-100 max-w-md text-center">
+    <main className="flex min-h-screen flex-col bg-white md:flex-row">
+      {/* Illustration */}
+      <aside className="hidden w-1/2 flex-col items-center justify-center bg-blue-600 p-12 text-white md:flex">
+        <h2 className="mb-4 text-4xl font-extrabold">Welcome to BurnScale.AI</h2>
+        <p className="max-w-md text-center text-lg text-blue-100">
           Understand your burnout patterns. Feel better. Live better.
         </p>
-        <Image
-          src="https://illustrations.popsy.co/gray/working-from-home.svg"
-          alt="Illustration"
-          width={288}
-          height={288}
-          className="mt-10"
-        />
-      </div>
+      </aside>
 
-      {/* Right: Form */}
-      <div className="w-full md:w-1/2 flex justify-center items-center p-8">
+      {/* Auth form */}
+      <section className="flex w-full items-center justify-center p-8 md:w-1/2">
         <div className="w-full max-w-md">
-          <h1 className="text-3xl font-bold text-gray-800 mb-6 text-center">
-            {isSignUp ? 'Create Your Account' : 'Welcome Back'}
+          <h1 className="mb-6 text-center text-3xl font-bold text-gray-800">
+            {isSignUp ? 'Create your account' : 'Welcome back'}
           </h1>
 
-          <form
-            className="space-y-5"
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleSubmit();
-            }}
-          >
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-600 mb-1">
-                Email
-              </label>
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <label className="block">
+              <span className="mb-1 block text-sm font-medium text-gray-600">Email</span>
               <input
-                id="email"
-                name="email"
                 type="email"
-                required
                 autoComplete="email"
+                required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
-                className="w-full px-4 py-2 text-gray-900 placeholder-gray-400 rounded-lg border border-gray-300 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                className="w-full rounded-lg border border-gray-300 px-4 py-2 text-gray-900 placeholder-gray-400 shadow-sm focus:ring-2 focus:ring-blue-500"
               />
-            </div>
+            </label>
 
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-600 mb-1">
-                Password
-              </label>
+            <label className="block">
+              <span className="mb-1 block text-sm font-medium text-gray-600">Password</span>
               <input
-                id="password"
-                name="password"
                 type="password"
-                required
                 autoComplete={isSignUp ? 'new-password' : 'current-password'}
+                required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full px-4 py-2 text-gray-900 placeholder-gray-400 rounded-lg border border-gray-300 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                className="w-full rounded-lg border border-gray-300 px-4 py-2 text-gray-900 placeholder-gray-400 shadow-sm focus:ring-2 focus:ring-blue-500"
               />
-            </div>
+            </label>
 
-            {error && (
-              <p className="text-sm text-red-600 mt-1" role="alert">
-                {error}
+            {errorMsg && (
+              <p className="text-sm text-red-600" role="alert">
+                {errorMsg}
               </p>
             )}
 
             <button
               type="submit"
-              disabled={loading || !email || !password}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg font-semibold transition disabled:opacity-50"
+              disabled={submitting}
+              className="w-full rounded-lg bg-blue-600 py-2 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {loading ? 'Please wait…' : isSignUp ? 'Sign Up' : 'Log In'}
+              {submitting
+                ? 'Please wait…'
+                : isSignUp
+                ? 'Sign up'
+                : 'Log in'}
             </button>
           </form>
 
-          <div className="text-center mt-6 text-sm text-gray-600">
+          <p className="mt-6 text-center text-sm text-gray-600">
             {isSignUp ? 'Already have an account?' : "Don't have an account?"}{' '}
             <button
+              type="button"
               onClick={() => setIsSignUp((prev) => !prev)}
-              className="text-blue-600 font-medium hover:underline transition"
+              className="font-medium text-blue-600 hover:underline"
             >
               {isSignUp ? 'Log in' : 'Sign up'}
             </button>
-          </div>
+          </p>
         </div>
-      </div>
+      </section>
     </main>
   );
 }

@@ -1,29 +1,46 @@
+// app/components/LogoutButton.tsx
 'use client';
 
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabaseClient';
-import React from 'react';
+import { LogOut } from 'lucide-react';
+import { useSupabaseClient } from '@supabase/auth-helpers-react';
 
+/**
+ * Re-usable, accessible logout button.
+ *
+ * • Uses the auth-helpers `useSupabaseClient()` hook (no singleton import)
+ * • Disables itself + shows “Logging out…” state while awaiting sign-out
+ * • `router.replace` avoids leaving “/auth/login” in back-stack
+ * • Lucide icon for clear affordance
+ */
 export default function LogoutButton() {
   const router = useRouter();
+  const supabase = useSupabaseClient();
+  const [loading, setLoading] = useState(false);
 
   const handleLogout = async () => {
-    try {
-      await supabase.auth.signOut();
-      router.push('/auth/login');
-    } catch (error) {
+    setLoading(true);
+    const { error } = await supabase.auth.signOut();
+    setLoading(false);
+
+    if (error) {
       console.error('Logout failed:', error);
       alert('Something went wrong while logging out.');
+      return;
     }
+    router.replace('/auth/login');
   };
 
   return (
     <button
       onClick={handleLogout}
-      className="text-sm font-medium text-red-600 hover:text-red-700 underline transition focus:outline-none focus:ring-2 focus:ring-red-400 rounded"
+      disabled={loading}
       aria-label="Log out"
+      className="inline-flex items-center gap-1 rounded px-2 py-1 text-sm font-medium text-red-600 transition hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-60"
     >
-      Log out
+      <LogOut size={14} />
+      {loading ? 'Logging out…' : 'Log out'}
     </button>
   );
 }
