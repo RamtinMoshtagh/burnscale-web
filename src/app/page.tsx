@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
+import { calculateBurnoutScore, Mood } from '@/app/utils/calculateBurnoutScore';
 
 const moods = [
   { label: 'Happy', emoji: '😊' },
@@ -32,16 +33,8 @@ export default function HomePage() {
   const [customStress, setCustomStress] = useState('');
   const [customRecovery, setCustomRecovery] = useState('');
 
-  const toggleOption = (
-    option: string,
-    selected: string[],
-    setSelected: (value: string[]) => void
-  ) => {
-    setSelected(
-      selected.includes(option)
-        ? selected.filter((o) => o !== option)
-        : [...selected, option]
-    );
+  const toggleOption = (option: string, selected: string[], setSelected: (value: string[]) => void) => {
+    setSelected(selected.includes(option) ? selected.filter((o) => o !== option) : [...selected, option]);
   };
 
   const addCustomOption = (
@@ -54,7 +47,6 @@ export default function HomePage() {
   ) => {
     const trimmed = value.trim();
     if (!trimmed || options.includes(trimmed)) return;
-
     setOptions([...options, trimmed]);
     setSelected([...selected, trimmed]);
     clear();
@@ -73,7 +65,6 @@ export default function HomePage() {
 
   const handleSubmit = async () => {
     setLoading(true);
-
     const {
       data: { user },
       error: userError,
@@ -85,6 +76,13 @@ export default function HomePage() {
       return;
     }
 
+    const burnout_score = calculateBurnoutScore({
+      mood: mood as Mood,
+      energy,
+      meaningfulness,
+      stressTriggers,
+    });
+
     const { error } = await supabase.from('checkins').insert({
       user_id: user.id,
       mood,
@@ -93,6 +91,7 @@ export default function HomePage() {
       stress_triggers: stressTriggers,
       recovery_activities: recoveryActivities,
       notes,
+      burnout_score,
     });
 
     setLoading(false);

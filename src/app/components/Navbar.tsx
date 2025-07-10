@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
-import { Menu, X } from 'lucide-react'; // You can use any icon library here
+import { Menu, X } from 'lucide-react';
 
 export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -45,26 +45,43 @@ export default function Navbar() {
 
         <nav className="hidden sm:flex items-center space-x-4">
           {isAuthenticated && pathname !== '/auth/login' && (
-            <button
-              onClick={handleLogout}
-              className="text-sm text-red-600 hover:underline"
-            >
-              Log out
-            </button>
+            <>
+              <Link
+                href="/dashboard"
+                className="text-sm text-gray-700 hover:text-blue-600 transition"
+              >
+                Dashboard
+              </Link>
+              <button
+                onClick={handleLogout}
+                className="text-sm text-red-600 hover:underline"
+              >
+                Log out
+              </button>
+            </>
           )}
         </nav>
       </div>
 
       {/* Mobile Menu */}
       {menuOpen && (
-        <div className="sm:hidden px-4 pb-4">
+        <div className="sm:hidden px-4 pb-4 space-y-2">
           {isAuthenticated && pathname !== '/auth/login' && (
-            <button
-              onClick={handleLogout}
-              className="block w-full text-left text-red-600 hover:underline"
-            >
-              Log out
-            </button>
+            <>
+              <Link
+                href="/dashboard"
+                className="block text-sm text-gray-700 hover:text-blue-600"
+                onClick={() => setMenuOpen(false)}
+              >
+                Dashboard
+              </Link>
+              <button
+                onClick={handleLogout}
+                className="block text-left w-full text-sm text-red-600 hover:underline"
+              >
+                Log out
+              </button>
+            </>
           )}
         </div>
       )}
