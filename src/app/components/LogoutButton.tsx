@@ -1,19 +1,10 @@
 // app/components/LogoutButton.tsx
 'use client';
-
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { LogOut } from 'lucide-react';
 import { useSupabaseClient } from '@supabase/auth-helpers-react';
 
-/**
- * Re-usable, accessible logout button.
- *
- * • Uses the auth-helpers `useSupabaseClient()` hook (no singleton import)
- * • Disables itself + shows “Logging out…” state while awaiting sign-out
- * • `router.replace` avoids leaving “/auth/login” in back-stack
- * • Lucide icon for clear affordance
- */
 export default function LogoutButton() {
   const router = useRouter();
   const supabase = useSupabaseClient();
@@ -29,6 +20,8 @@ export default function LogoutButton() {
       alert('Something went wrong while logging out.');
       return;
     }
+
+    // replace so user can’t “back” into a protected page
     router.replace('/auth/login');
   };
 
