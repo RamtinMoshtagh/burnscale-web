@@ -48,6 +48,12 @@ const DEFAULT_RECOVERY = [
   'Music',
 ] as const;
 
+type NotesAnalysis = {
+  summary: string
+  sentiment: 'positive' | 'neutral' | 'negative'
+  themes: string[]
+}
+
 /* ──────────────────────────────────────────────────────────────────── */
 /* 1.  Supabase helpers                                                */
 /* ──────────────────────────────────────────────────────────────────── */
@@ -89,6 +95,27 @@ async function hideCustomization(vars: { type: CustomType; value: string }) {
     { onConflict: 'user_id,type,value' }
   );
 }
+
+// 1a) helper to call your API route:
+async function analyzeNotes(notes: string): Promise<NotesAnalysis> {
+  const res = await fetch('/api/notes-analysis', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ notes }),
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    console.error('notes-analysis failed:', res.status, text);
+    throw new Error(text || `HTTP ${res.status}`);
+  }
+  try {
+    return JSON.parse(text) as NotesAnalysis;
+  } catch (err) {
+    console.error('Invalid JSON from notes-analysis:', text);
+    throw new Error('Invalid JSON from notes-analysis');
+  }
+}
+
 
 /* ──────────────────────────────────────────────────────────────────── */
 /* 2.  Reusable components                                             */
@@ -282,6 +309,7 @@ function CheckInPage() {
   const router = useRouter();
   const qc = useQueryClient();
 
+  
   /* ---------------- Fetch customisations ------------------------ */
   const {
     data: rows = [],
@@ -291,6 +319,15 @@ function CheckInPage() {
     queryFn: fetchCustomizations,
     staleTime: 60_000,
   });
+
+  const notesMutation = useMutation<NotesAnalysis, Error, string>({
+  mutationFn: analyzeNotes,
+  onError(err) {
+    console.error('Notes analysis error:', err);
+    toast.error('Notes analysis failed: ' + err.message);
+  },
+});
+
 
   /* ---------------- Derive option pools ------------------------- */
   const { moodOptions, stressOptions, recoveryOptions } = useMemo(() => {
@@ -545,16 +582,39 @@ function CheckInPage() {
         />
 
         {/* Notes */}
-        <section>
-          <label className="mb-1 block text-sm font-medium">Notes</label>
-          <textarea
-            rows={4}
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Anything else on your mind?"
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-          />
-        </section>
+{/* Notes */}
+<section>
+  <label className="mb-1 block text-sm font-medium">Notes</label>
+  <textarea
+    rows={4}
+    value={notes}
+    onChange={(e) => setNotes(e.target.value)}
+    onBlur={() => {
+      if (notes.trim()) notesMutation.mutate(notes);
+    }}
+    placeholder="Anything else on your mind?"
+    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+  />
+  {/* render insights */}
+  {notesMutation.isSuccess && (
+    <div className="mt-2 space-y-1 p-3 bg-gray-50 rounded">
+      <p className="text-sm">
+        <strong>Notes Summary:</strong> {notesMutation.data.summary}
+      </p>
+      <p className="text-sm">
+        <strong>Sentiment:</strong> {notesMutation.data.sentiment}
+      </p>
+      <p className="text-sm">
+        <strong>Themes:</strong>{' '}
+        {notesMutation.data.themes.length
+          ? notesMutation.data.themes.join(', ')
+          : 'None'}
+      </p>
+    </div>
+  )}
+</section>
+
+
 
         {/* Submit */}
         <button

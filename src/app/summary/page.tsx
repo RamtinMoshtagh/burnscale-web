@@ -1,3 +1,4 @@
+// src/app/summary/page.tsx
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
@@ -14,24 +15,37 @@ interface CheckIn {
   recovery_activities?: string[];
 }
 
+interface AIResult {
+  summary: string;
+  imagePrompt: string;
+  imageUrl: string;
+  personalReflection: string;
+}
+
+interface NotesInsights {
+  summary: string;
+  sentiment: string;
+  themes: string[];
+}
+
 export default function SummaryPage() {
   const [checkins, setCheckins] = useState<CheckIn[]>([]);
   const [loading, setLoading] = useState(true);
-  const [imagePrompt, setImagePrompt] = useState('');
-  const [imageUrl, setImageUrl] = useState('');
-  const [personalReflection, setPersonalReflection] = useState('');
+  const [aiResult, setAIResult] = useState<AIResult | null>(null);
+  const [notesInsights, setNotesInsights] = useState<NotesInsights | null>(null);
+  const [notesError, setNotesError] = useState<string | null>(null);
   const [frequentTriggers, setFrequentTriggers] = useState<string[]>([]);
   const [tips, setTips] = useState<string[]>([]);
   const [tipsLoading, setTipsLoading] = useState(false);
   const [tipsError, setTipsError] = useState('');
   const [saved, setSaved] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
+  // Fetch check-ins and generate moodboard
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-
+        const oneWeekAgo = new Date(Date.now() - 7 * 86400e3).toISOString();
         const { data: checkinData, error: checkinError } = await supabase
           .from('checkins')
           .select('*')
@@ -44,89 +58,125 @@ export default function SummaryPage() {
           setLoading(false);
           return;
         }
-
         setCheckins(checkinData);
 
-        // Detect frequently repeated stress triggers
+        // frequent stress triggers (≥3)
         const triggerMap: Record<string, number> = {};
-        checkinData.forEach((entry) => {
-entry.stress_triggers?.forEach((trigger: string) => {
+        checkinData.forEach(entry => {
+          entry.stress_triggers?.forEach((trigger: string | number) => {
             triggerMap[trigger] = (triggerMap[trigger] || 0) + 1;
           });
         });
-        const frequent = Object.entries(triggerMap)
-          .filter(([, count]) => count >= 3)
-          .map(([trigger]) => trigger);
-        setFrequentTriggers(frequent);
+        setFrequentTriggers(
+          Object.entries(triggerMap)
+            .filter(([, cnt]) => cnt >= 3)
+            .map(([t]) => t)
+        );
 
-        // Generate AI summary
-        const response = await fetch('/api/openai-proxy', {
+        // AI moodboard summary & image via your proxy
+        const res = await fetch('/api/openai-proxy', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ checkins: checkinData }),
         });
-
-        const result = await response.json();
-        if (!result.summary || !result.imagePrompt || !result.personalReflection) {
+        const result = await res.json();
+        if (
+          !result.summary ||
+          !result.imagePrompt ||
+          !result.personalReflection
+        ) {
           throw new Error('AI failed to generate a complete summary');
         }
+        setAIResult({
+          summary: result.summary,
+          imagePrompt: result.imagePrompt,
+          imageUrl: result.imageUrl || '',
+          personalReflection: result.personalReflection,
+        });
 
-        setImagePrompt(result.imagePrompt);
-        setImageUrl(result.imageUrl || '');
-        setPersonalReflection(result.personalReflection);
-
-        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        // save moodboard
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser();
         if (userError || !user) throw userError;
 
-        const { error: insertError } = await supabase.from('moodboards').insert([
-          {
-            user_id: user.id,
-            summary: result.summary,
-            prompt: result.imagePrompt,
-            image_url: result.imageUrl,
-          },
-        ]);
-
+        const { error: insertError } = await supabase
+          .from('moodboards')
+          .insert([
+            {
+              user_id: user.id,
+              summary: result.summary,
+              prompt: result.imagePrompt,
+              image_url: result.imageUrl,
+            },
+          ]);
         if (insertError) throw insertError;
         setSaved(true);
-      } catch (err) {
+      } catch (err: any) {
         console.error('Summary error:', err);
         setError('Something went wrong while generating your moodboard.');
       } finally {
         setLoading(false);
       }
     };
-
     fetchData();
   }, []);
 
+  // Analyze free-form notes separately
+  useEffect(() => {
+    if (!checkins.length) return;
+    const allNotes = checkins
+      .map((c) => c.notes?.trim())
+      .filter((n): n is string => !!n)
+      .join('\n\n');
+    if (!allNotes) return;
+
+    (async () => {
+      try {
+        const res = await fetch('/api/notes-analysis', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ notes: allNotes }),
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || 'Notes analysis failed');
+        setNotesInsights({
+          summary: json.summary,
+          sentiment: json.sentiment,
+          themes: json.themes,
+        });
+      } catch (e: any) {
+        console.error('Notes analysis error:', e);
+        setNotesError(e.message);
+      }
+    })();
+  }, [checkins]);
+
   const handleDownload = useCallback(() => {
-    if (!imageUrl) return;
+    if (!aiResult?.imageUrl) return;
     const link = document.createElement('a');
-    link.href = imageUrl;
+    link.href = aiResult.imageUrl;
     link.download = 'moodboard.png';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-  }, [imageUrl]);
+  }, [aiResult]);
 
   const handleGetTips = async () => {
     setTips([]);
     setTipsError('');
     setTipsLoading(true);
-
     try {
       const res = await fetch('/api/tips-agent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ triggers: frequentTriggers }),
       });
-
       const data = await res.json();
       if (!data.tips || !Array.isArray(data.tips)) {
         throw new Error(data.error || 'No tips returned');
       }
-
       setTips(data.tips);
     } catch (err) {
       console.error('Tips error:', err);
@@ -143,31 +193,63 @@ entry.stress_triggers?.forEach((trigger: string) => {
 
         {loading ? (
           <div className="text-center py-12">
-            <p className="text-gray-500 text-sm animate-pulse">Generating your insights...</p>
-          </div>
-        ) : checkins.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-gray-500">No check-ins to summarize yet.</p>
+            <p className="text-gray-500 text-sm animate-pulse">
+              Generating your insights...
+            </p>
           </div>
         ) : error ? (
           <div className="text-center py-12">
             <p className="text-red-500 font-medium">{error}</p>
           </div>
+        ) : checkins.length === 0 || !aiResult ? (
+          <div className="text-center py-12">
+            <p className="text-gray-500">No check-ins to summarize yet.</p>
+          </div>
         ) : (
           <>
-            {/* Reflection */}
+            {/* Free-text Notes Insights */}
             <section className="bg-white rounded-xl shadow-sm p-6 space-y-3">
-              <h2 className="text-xl font-semibold">💬 Personalized Reflection</h2>
-              <p className="text-gray-700 whitespace-pre-line leading-relaxed">{personalReflection}</p>
+              <h2 className="text-xl font-semibold">📝 Notes Insights</h2>
+              {notesError ? (
+                <p className="text-red-600">{notesError}</p>
+              ) : !notesInsights ? (
+                <p className="text-gray-500">Analyzing your notes…</p>
+              ) : (
+                <div className="space-y-2">
+                  <p>
+                    <strong>Summary:</strong> {notesInsights.summary}
+                  </p>
+                  <p>
+                    <strong>Sentiment:</strong> {notesInsights.sentiment}
+                  </p>
+                  <p>
+                    <strong>Themes:</strong>{' '}
+                    {notesInsights.themes.length > 0
+                      ? notesInsights.themes.join(', ')
+                      : 'None detected'}
+                  </p>
+                </div>
+              )}
             </section>
 
-            {/* Pattern Detection + CTA */}
+            {/* Personalized Reflection */}
+            <section className="bg-white rounded-xl shadow-sm p-6 space-y-3">
+              <h2 className="text-xl font-semibold">💬 Personalized Reflection</h2>
+              <p className="text-gray-700 whitespace-pre-line leading-relaxed">
+                {aiResult.personalReflection}
+              </p>
+            </section>
+
+            {/* Trigger Pattern & Tips */}
             {frequentTriggers.length > 0 && (
               <section className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-md space-y-2">
-                <h3 className="font-semibold text-yellow-800">🧠 Trigger Pattern Detected</h3>
+                <h3 className="font-semibold text-yellow-800">
+                  🧠 Trigger Pattern Detected
+                </h3>
                 <p className="text-sm text-yellow-700">
-                  I’ve noticed that <strong>{frequentTriggers.join(', ')}</strong> keep showing up as
-                  stress triggers. Would you like some tips or techniques that might help?
+                  I’ve noticed that{' '}
+                  <strong>{frequentTriggers.join(', ')}</strong> keep showing up
+                  as stress triggers. Would you like some tips?
                 </p>
                 <button
                   onClick={handleGetTips}
@@ -175,7 +257,9 @@ entry.stress_triggers?.forEach((trigger: string) => {
                 >
                   {tipsLoading ? 'Loading...' : '💡 Show Me Tips'}
                 </button>
-                {tipsError && <p className="text-red-500 text-sm mt-1">{tipsError}</p>}
+                {tipsError && (
+                  <p className="text-red-500 text-sm mt-1">{tipsError}</p>
+                )}
                 {tips.length > 0 && (
                   <ul className="mt-3 list-disc list-inside text-sm text-gray-800 space-y-1">
                     {tips.map((tip, idx) => (
@@ -190,24 +274,22 @@ entry.stress_triggers?.forEach((trigger: string) => {
             <section className="bg-white rounded-xl shadow-sm p-6 space-y-3">
               <h2 className="text-xl font-semibold">🖼️ Visual Mood Snapshot</h2>
               <p className="text-sm text-gray-500">
-                Prompt used: <span className="italic">{imagePrompt}</span>
+                Prompt: <span className="italic">{aiResult.imagePrompt}</span>
               </p>
-              {imageUrl ? (
-  <Image
-  src={imageUrl}
-  alt="Moodboard generated by AI"
-  width={1024}
-  height={512}
-  className="w-full h-64 object-cover rounded-lg shadow"
-/>
-
-) : (
-  <p className="text-gray-400 italic">No image generated</p>
-)}
-
+              {aiResult.imageUrl ? (
+                <Image
+                  src={aiResult.imageUrl}
+                  alt="Moodboard generated by AI"
+                  width={1024}
+                  height={512}
+                  className="w-full h-64 object-cover rounded-lg shadow"
+                />
+              ) : (
+                <p className="text-gray-400 italic">No image generated</p>
+              )}
             </section>
 
-            {/* Download Button */}
+            {/* Download & Save Notice */}
             <div className="text-center mt-6 space-y-3">
               <button
                 onClick={handleDownload}

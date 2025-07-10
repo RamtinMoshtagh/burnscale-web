@@ -1,5 +1,4 @@
 // src/app/layout.tsx
-
 import './globals.css';
 import { ReactNode } from 'react';
 import { cookies } from 'next/headers';
@@ -16,12 +15,13 @@ export const metadata: Metadata = {
   description: 'Track your burnout and recovery patterns with AI insight.',
 };
 
-export default async function RootLayout({ children }: { children: ReactNode }) {
-  const cookieStore = cookies();
-
-  const supabase = createServerComponentClient<Database>({
-    cookies: () => cookieStore,
-  });
+export default async function RootLayout({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  // Pass the cookies function directly so the helper can await it internally
+  const supabase = createServerComponentClient<Database>({ cookies });
 
   const {
     data: { session },
