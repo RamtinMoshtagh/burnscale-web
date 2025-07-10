@@ -56,14 +56,12 @@ export default function AuthPage() {
           Understand your burnout patterns. Feel better. Live better.
         </p>
         <Image
-  src="https://illustrations.popsy.co/gray/working-from-home.svg"
-  alt="Illustration"
-  width={288}
-  height={288}
-  className="mt-10"
-/>
-
-
+          src="https://illustrations.popsy.co/gray/working-from-home.svg"
+          alt="Illustration"
+          width={288}
+          height={288}
+          className="mt-10"
+        />
       </div>
 
       {/* Right: Auth Card */}
@@ -81,28 +79,36 @@ export default function AuthPage() {
             }}
           >
             <div>
-              <label className="block text-sm font-medium text-gray-600 mb-1">Email</label>
+              <label htmlFor="email" className="block text-sm font-medium text-gray-600 mb-1">
+                Email
+              </label>
               <input
+                id="email"
+                name="email"
                 type="email"
                 required
                 autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
-className="w-full px-4 py-2 text-gray-900 placeholder-gray-400 rounded-lg border border-gray-300 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                className="w-full px-4 py-2 text-gray-900 placeholder-gray-400 rounded-lg border border-gray-300 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-600 mb-1">Password</label>
+              <label htmlFor="password" className="block text-sm font-medium text-gray-600 mb-1">
+                Password
+              </label>
               <input
+                id="password"
+                name="password"
                 type="password"
                 required
                 autoComplete={isSignUp ? 'new-password' : 'current-password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-className="w-full px-4 py-2 text-gray-900 placeholder-gray-400 rounded-lg border border-gray-300 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                className="w-full px-4 py-2 text-gray-900 placeholder-gray-400 rounded-lg border border-gray-300 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
               />
             </div>
 
