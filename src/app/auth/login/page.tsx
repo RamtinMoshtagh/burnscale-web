@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
+import Image from 'next/image';
 
 export default function AuthPage() {
   const router = useRouter();
@@ -54,11 +55,14 @@ export default function AuthPage() {
         <p className="text-lg text-blue-100 max-w-md text-center">
           Understand your burnout patterns. Feel better. Live better.
         </p>
-        <img
-          src="https://illustrations.popsy.co/gray/working-from-home.svg"
-          alt=""
-          className="mt-10 w-72"
-        />
+        <Image
+  src="https://illustrations.popsy.co/gray/working-from-home.svg"
+  alt="Working from home illustration"
+  width={288}
+  height={288}
+  className="mt-10 w-72"
+/>
+
       </div>
 
       {/* Right: Auth Card */}
