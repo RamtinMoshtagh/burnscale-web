@@ -10,7 +10,9 @@ interface CheckIn {
 
 export async function POST(req: Request) {
   try {
-    const { checkins } = await req.json();
+    const body = (await req.json()) as { checkins: CheckIn[] };
+const checkins = body.checkins;
+
 
     if (!Array.isArray(checkins) || checkins.length === 0) {
       return NextResponse.json({ error: 'Invalid check-in data.' }, { status: 400 });
@@ -75,12 +77,10 @@ ${formatted.join('\n')}
     }
 
     return NextResponse.json({ summary, imagePrompt, imageUrl, personalReflection });
-  } catch (err: any) {
-    console.error('Proxy error:', err?.message || err);
+  } catch (err: unknown) {
+  const error = err instanceof Error ? err.message : 'Unknown error';
+  console.error('...', error);
+  return NextResponse.json({ error }, { status: 500 });
+}
 
-    return NextResponse.json(
-      { error: err?.message || 'Internal server error', details: err },
-      { status: 500 }
-    );
-  }
 }

@@ -4,7 +4,9 @@ import { openai } from '@/lib/openai';
 
 export async function POST(req: Request) {
   try {
-    const { triggers } = await req.json();
+    const body = (await req.json()) as { triggers: string[] };
+const triggers = body.triggers;
+
 
     if (!Array.isArray(triggers) || triggers.length === 0) {
       return NextResponse.json({ error: 'No triggers provided.' }, { status: 400 });
@@ -26,8 +28,10 @@ Format your answer as a list.`;
     const tips = text.split(/\n+|\d+\.\s*/).filter(Boolean);
 
     return NextResponse.json({ tips });
-  } catch (err: any) {
-    console.error('Tips Agent Error:', err.message || err);
-    return NextResponse.json({ error: 'Failed to generate tips', detail: err.message }, { status: 500 });
-  }
+  } catch (err: unknown) {
+  const error = err instanceof Error ? err.message : 'Unknown error';
+  console.error('...', error);
+  return NextResponse.json({ error }, { status: 500 });
+}
+
 }
