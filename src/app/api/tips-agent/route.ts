@@ -30,8 +30,12 @@ Format your answer as a list.`;
     return NextResponse.json({ tips });
   } catch (err: unknown) {
   const error = err instanceof Error ? err.message : 'Unknown error';
-  console.error('...', error);
-  return NextResponse.json({ error }, { status: 500 });
+  console.error('Proxy error:', error);
+
+  return NextResponse.json(
+    { error, details: err },
+    { status: 500 }
+  );
 }
 
 }

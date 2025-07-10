@@ -36,8 +36,12 @@ Return as markdown with bullet points.
     return NextResponse.json({ advice: content });
   } catch (err: unknown) {
   const error = err instanceof Error ? err.message : 'Unknown error';
-  console.error('...', error);
-  return NextResponse.json({ error }, { status: 500 });
+  console.error('Proxy error:', error);
+
+  return NextResponse.json(
+    { error, details: err },
+    { status: 500 }
+  );
 }
 
 }

@@ -57,11 +57,12 @@ export default function AuthPage() {
         </p>
         <Image
   src="https://illustrations.popsy.co/gray/working-from-home.svg"
-  alt="Working from home illustration"
+  alt="Illustration"
   width={288}
   height={288}
-  className="mt-10 w-72"
+  className="mt-10"
 />
+
 
       </div>
 

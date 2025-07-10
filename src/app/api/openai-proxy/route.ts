@@ -79,8 +79,12 @@ ${formatted.join('\n')}
     return NextResponse.json({ summary, imagePrompt, imageUrl, personalReflection });
   } catch (err: unknown) {
   const error = err instanceof Error ? err.message : 'Unknown error';
-  console.error('...', error);
-  return NextResponse.json({ error }, { status: 500 });
+  console.error('Proxy error:', error);
+
+  return NextResponse.json(
+    { error, details: err },
+    { status: 500 }
+  );
 }
 
 }
