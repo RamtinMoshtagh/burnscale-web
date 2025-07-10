@@ -1,4 +1,3 @@
-// middleware.ts
 import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
@@ -12,16 +11,18 @@ export async function middleware(req: NextRequest) {
   } = await supabase.auth.getSession();
 
   const pathname = req.nextUrl.pathname;
-  const isAuthRoute = pathname.startsWith('/auth');
-  const isRoot = pathname === '/';
 
-  if (!session && !isAuthRoute) {
-    // Not logged in → redirect to login
+  const isAuthRoute = pathname.startsWith('/auth');
+  const isPublicRoute = isAuthRoute || pathname === '/';
+  const isProtectedRoute = !isPublicRoute;
+
+  if (!session && isProtectedRoute) {
+    // User not logged in and trying to access protected route
     return NextResponse.redirect(new URL('/auth/login', req.url));
   }
 
-  if (session && (isAuthRoute || isRoot)) {
-    // Already logged in → redirect to app
+  if (session && (isAuthRoute || pathname === '/')) {
+    // User logged in and trying to access login or root
     return NextResponse.redirect(new URL('/check-in', req.url));
   }
 
@@ -29,5 +30,5 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next|favicon.ico|api).*)'],
+  matcher: ['/((?!_next|favicon.ico|api|static|images).*)'], // Exclude static files & API
 };

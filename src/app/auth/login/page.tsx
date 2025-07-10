@@ -15,16 +15,10 @@ export default function AuthPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const checkUser = async () => {
-      const { data } = await supabase.auth.getUser();
-      if (data?.user) router.replace('/');
-    };
-    checkUser();
-  }, [router]);
-
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session?.user) router.replace('/');
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        router.replace('/check-in');
+      }
     });
     return () => subscription.unsubscribe();
   }, [router]);
@@ -38,7 +32,9 @@ export default function AuthPage() {
         ? await supabase.auth.signUp({ email, password })
         : await supabase.auth.signInWithPassword({ email, password });
 
-      if (error) setError(error.message);
+      if (error) {
+        setError(error.message);
+      }
     } catch (err) {
       console.error(err);
       setError('Unexpected error. Please try again.');
@@ -49,7 +45,7 @@ export default function AuthPage() {
 
   return (
     <main className="min-h-screen flex flex-col md:flex-row bg-white">
-      {/* Left: Branding / Welcome */}
+      {/* Left: Branding */}
       <div className="hidden md:flex flex-col justify-center items-center bg-blue-600 text-white w-full md:w-1/2 p-12">
         <h2 className="text-4xl font-extrabold mb-4">Welcome to BurnScale.AI</h2>
         <p className="text-lg text-blue-100 max-w-md text-center">
@@ -64,7 +60,7 @@ export default function AuthPage() {
         />
       </div>
 
-      {/* Right: Auth Card */}
+      {/* Right: Form */}
       <div className="w-full md:w-1/2 flex justify-center items-center p-8">
         <div className="w-full max-w-md">
           <h1 className="text-3xl font-bold text-gray-800 mb-6 text-center">
@@ -113,7 +109,7 @@ export default function AuthPage() {
             </div>
 
             {error && (
-              <p className="text-sm text-red-600" aria-live="polite">
+              <p className="text-sm text-red-600 mt-1" role="alert">
                 {error}
               </p>
             )}
