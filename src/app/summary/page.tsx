@@ -95,63 +95,77 @@ export default function SummaryPage() {
         });
 
         // save moodboard
-        const {
-          data: { user },
-          error: userError,
-        } = await supabase.auth.getUser();
-        if (userError || !user) throw userError;
-
-        const { error: insertError } = await supabase
-          .from('moodboards')
-          .insert([
-            {
-              user_id: user.id,
-              summary: result.summary,
-              prompt: result.imagePrompt,
-              image_url: result.imageUrl,
-            },
-          ]);
-        if (insertError) throw insertError;
-        setSaved(true);
-      } catch (err: any) {
-        console.error('Summary error:', err);
-        setError('Something went wrong while generating your moodboard.');
-      } finally {
-        setLoading(false);
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+      if (userError || !user) {
+        throw userError ?? new Error('User not authenticated');
       }
-    };
-    fetchData();
-  }, []);
+
+      const { error: insertError } = await supabase
+        .from('moodboards')
+        .insert([
+          {
+            user_id: user.id,
+            summary: result.summary,
+            prompt: result.imagePrompt,
+            image_url: result.imageUrl,
+          },
+        ]);
+
+      if (insertError) {
+        throw insertError;
+      }
+
+      setSaved(true);
+    } catch (err: unknown) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      console.error('Summary error:', error);
+      setError('Something went wrong while generating your moodboard.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  fetchData();
+}, []);
 
   // Analyze free-form notes separately
-  useEffect(() => {
-    if (!checkins.length) return;
-    const allNotes = checkins
-      .map((c) => c.notes?.trim())
-      .filter((n): n is string => !!n)
-      .join('\n\n');
-    if (!allNotes) return;
+useEffect(() => {
+  if (!checkins.length) return;
 
-    (async () => {
-      try {
-        const res = await fetch('/api/notes-analysis', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ notes: allNotes }),
-        });
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.error || 'Notes analysis failed');
-        setNotesInsights({
-          summary: json.summary,
-          sentiment: json.sentiment,
-          themes: json.themes,
-        });
-      } catch (e: any) {
-        console.error('Notes analysis error:', e);
-        setNotesError(e.message);
+  const allNotes = checkins
+    .map((c) => c.notes?.trim())
+    .filter((n): n is string => !!n)
+    .join('\n\n');
+  if (!allNotes) return;
+
+  (async () => {
+    try {
+      const res = await fetch('/api/notes-analysis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notes: allNotes }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        // server returned a 4xx/5xx
+        throw new Error(json.error || 'Notes analysis failed');
       }
-    })();
-  }, [checkins]);
+      setNotesInsights({
+        summary: json.summary,
+        sentiment: json.sentiment,
+        themes: json.themes,
+      });
+    } catch (err: unknown) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      console.error('Notes analysis error:', error);
+      setNotesError(error.message);
+    }
+  })();
+}, [checkins]);
+
 
   const handleDownload = useCallback(() => {
     if (!aiResult?.imageUrl) return;

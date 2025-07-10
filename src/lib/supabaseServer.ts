@@ -1,14 +1,7 @@
-// lib/supabaseServer.ts
+// src/lib/supabaseServer.ts
 import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
+import type { Database } from '@/app/types/supabase';
 
-/**
- * Server-side Supabase client helper.
- *
- * • No direct `cookies().get()` calls → avoids hydration warnings.  
- * • Keep the generic `<any>` or swap in your generated `Database` type once you
- *   run `supabase gen types typescript --local`.
- */
-export function supabaseServer() {
-  return createServerComponentClient<any>({ cookies });
-}
+export const supabaseServer = () =>
+  createServerComponentClient<Database>({ cookies });

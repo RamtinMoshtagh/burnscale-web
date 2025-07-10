@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSupabaseClient, useSessionContext } from '@supabase/auth-helpers-react';
-import Image from 'next/image';
+
 
 /* ---------------------------------------------------- */
 /*  Basic helpers                                       */
