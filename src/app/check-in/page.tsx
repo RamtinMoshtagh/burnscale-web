@@ -110,7 +110,7 @@ async function analyzeNotes(notes: string): Promise<NotesAnalysis> {
   }
   try {
   return JSON.parse(text) as NotesAnalysis;
-} catch (_err) {
+} catch {
   console.error('Invalid JSON from notes-analysis:', text);
   throw new Error('Invalid JSON from notes-analysis');
 }
