@@ -12,7 +12,7 @@ interface NotesAnalysisResult {
 
 export async function POST(req: Request) {
   try {
-    const { notes } = (await req.json()) as { notes: string };
+    const { notes } = (await req.json()) as { notes?: string };
     if (!notes) {
       return NextResponse.json({ error: 'No notes provided.' }, { status: 400 });
     }
@@ -37,13 +37,35 @@ ${notes}
       return NextResponse.json({ error: 'AI returned no content.' }, { status: 500 });
     }
 
-    // Expect JSON in the form: {"summary":"...","sentiment":"...","themes":["a","b","c"]}
-    const result = JSON.parse(text) as NotesAnalysisResult;
+    let result: NotesAnalysisResult;
+    try {
+      result = JSON.parse(text) as NotesAnalysisResult;
+    } catch {
+      console.error('Notes-analysis returned invalid JSON:', text);
+      return NextResponse.json(
+        { error: 'Notes-analysis returned malformed JSON.' },
+        { status: 500 }
+      );
+    }
+
+    // Basic validation
+    if (
+      typeof result.summary !== 'string' ||
+      !['positive', 'neutral', 'negative'].includes(result.sentiment) ||
+      !Array.isArray(result.themes)
+    ) {
+      console.error('Notes-analysis returned unexpected structure:', result);
+      return NextResponse.json(
+        { error: 'Notes-analysis returned unexpected data.' },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json(result);
-  } catch (_err: unknown) {
-    console.error('Notes-analysis error:', _err);
+  } catch (err: unknown) {
+    console.error('Notes-analysis error:', err);
     return NextResponse.json(
-      { error: (_err as Error).message || 'Unknown error' },
+      { error: (err as Error).message || 'Unknown error' },
       { status: 500 }
     );
   }
