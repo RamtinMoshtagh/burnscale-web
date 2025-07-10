@@ -1,41 +1,38 @@
-// app/(auth)/AuthPage.tsx
+// src/app/auth/login/page.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSupabaseClient, useSessionContext } from '@supabase/auth-helpers-react';
 
-
-/* ---------------------------------------------------- */
-/*  Basic helpers                                       */
-/* ---------------------------------------------------- */
+// Basic email validation
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-/* ---------------------------------------------------- */
-/*  Component                                           */
-/* ---------------------------------------------------- */
 export default function AuthPage() {
   const router = useRouter();
   const supabase = useSupabaseClient();
   const { session, isLoading: sessionLoading } = useSessionContext();
 
-  /* redirect when already logged-in */
+  // If already signed in, send to check-in
   useEffect(() => {
-    if (session) router.replace('/check-in');
+    if (session) {
+      router.replace('/check-in');
+    }
   }, [session, router]);
 
-  /* local state */
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
-  /* handle submit */
+  const magicLinkRedirect = 'https://burnscale-web.vercel.app/auth/login';
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErrorMsg('');
 
+    // Validation
     if (!emailPattern.test(email)) {
       setErrorMsg('Enter a valid e-mail address.');
       return;
@@ -47,20 +44,33 @@ export default function AuthPage() {
 
     setSubmitting(true);
 
-    const { error } = isSignUp
-      ? await supabase.auth.signUp({ email, password })
-      : await supabase.auth.signInWithPassword({ email, password });
+    let authResult;
+    if (isSignUp) {
+      // Sign-up (magic link) flow
+      authResult = await supabase.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: magicLinkRedirect },
+      });
+    } else {
+      // Password sign-in (no redirect option)
+      authResult = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+    }
 
-    if (error) setErrorMsg(error.message);
+    if (authResult.error) {
+      setErrorMsg(authResult.error.message);
+    }
     setSubmitting(false);
   }
 
-  /* wait for initial session check */
-  if (sessionLoading) return null;
+  if (sessionLoading) {
+    // Wait until we know session state
+    return null;
+  }
 
-  /* -------------------------------------------------- */
-  /*  UI                                                */
-  /* -------------------------------------------------- */
   return (
     <main className="flex min-h-screen flex-col bg-white md:flex-row">
       {/* Illustration */}
@@ -80,7 +90,9 @@ export default function AuthPage() {
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-gray-600">Email</span>
+              <span className="mb-1 block text-sm font-medium text-gray-600">
+                Email
+              </span>
               <input
                 type="email"
                 autoComplete="email"
@@ -93,7 +105,9 @@ export default function AuthPage() {
             </label>
 
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-gray-600">Password</span>
+              <span className="mb-1 block text-sm font-medium text-gray-600">
+                Password
+              </span>
               <input
                 type="password"
                 autoComplete={isSignUp ? 'new-password' : 'current-password'}
@@ -125,7 +139,9 @@ export default function AuthPage() {
           </form>
 
           <p className="mt-6 text-center text-sm text-gray-600">
-            {isSignUp ? 'Already have an account?' : "Don't have an account?"}{' '}
+            {isSignUp
+              ? 'Already have an account?'
+              : "Don't have an account?"}{' '}
             <button
               type="button"
               onClick={() => setIsSignUp((prev) => !prev)}
